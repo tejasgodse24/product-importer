@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk Upload - Upload History</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 28px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        tr:hover {
+            background: #f8f9ff;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-processing {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .badge-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .pagination button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            font-size: 22px;
+            color: #333;
+        }
+
+        .close-btn {
+            font-size: 28px;
+            color: #999;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9ff;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .file-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0f2ff;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .upload-progress {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .upload-progress.show {
+            display: block;
+        }
+
+        .progress-text {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Bulk Upload - Upload History</h1>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="openUploadModal()">+ Upload New CSV File</button>
+                <a href="/product/" class="btn btn-secondary">← Back to Products</a>
+            </div>
+        </div>
+
+        <div id="alertContainer"></div>
+
+        <div id="loadingContainer" class="loading" style="display: none;">
+            Loading upload history...
+        </div>
+
+        <div id="tableContainer">
+            <table id="historyTable">
+                <thead>
+                    <tr>
+                        <th>File Name</th>
+                        <th>Status</th>
+                        <th>Progress</th>
+                        <th>Records</th>
+                        <th>Started At</th>
+                        <th>Completed At</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                    <!-- Data will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <button id="prevBtn" onclick="prevPage()">Previous</button>
+            <span class="page-info" id="pageInfo">Page 1 of 1</span>
+            <button id="nextBtn" onclick="nextPage()">Next</button>
+        </div>
+    </div>
+
+    <!-- Upload Modal -->
+    <div id="uploadModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Upload CSV File</h2>
+                <button class="close-btn" onclick="closeUploadModal()">&times;</button>
+            </div>
+
+            <form id="uploadForm" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">Click to browse or drag and drop your CSV file here</div>
+                    <div class="file-types">Supported formats: .csv, .xlsx (Max size: 100MB)</div>
+                    <input type="file" id="fileInput" name="file" accept=".csv,.xlsx" style="display: none;" required>
+                </div>
+
+                <div class="file-info" id="fileInfo">
+                    <div class="file-name" id="fileName"></div>
+                    <div class="file-size" id="fileSize"></div>
+                    <span class="remove-file" id="removeFile" style="color: #dc3545; cursor: pointer; font-size: 12px; margin-top: 8px; display: inline-block;">Remove file</span>
+                </div>
+
+                <div class="upload-progress" id="uploadProgress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">Uploading... 0%</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="uploadBtn" style="margin-top: 20px; width: 100%; display: none;">
+                    Upload and Process
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let totalPages = 1;
+        let selectedFile = null;
+        let refreshInterval;
+
+        $(document).ready(function() {
+            loadUploadHistory();
+
+            // Auto-refresh every 5 seconds
+            refreshInterval = setInterval(loadUploadHistory, 5000);
+
+            // Upload area click
+            $('#uploadArea').on('click', function(e) {
+                // Prevent infinite loop by stopping propagation
+                e.stopPropagation();
+                $('#fileInput').click();
+            });
+
+            // File selection
+            $('#fileInput').on('change', handleFileSelect);
+
+            // Prevent file input click from bubbling to uploadArea
+            $('#fileInput').on('click', function(e) {
+                e.stopPropagation();
+            });
+
+            // Remove file
+            $('#removeFile').on('click', function(e) {
+                e.stopPropagation();
+                resetFileSelection();
+            });
+
+            // Drag and drop
+            $('#uploadArea').on('dragover', function(e) {
+                e.preventDefault();
+                $(this).css('background', '#e8ebff');
+            });
+
+            $('#uploadArea').on('dragleave', function() {
+                $(this).css('background', '#f8f9ff');
+            });
+
+            $('#uploadArea').on('drop', function(e) {
+                e.preventDefault();
+                $(this).css('background', '#f8f9ff');
+                const files = e.originalEvent.dataTransfer.files;
+                if (files.length > 0) {
+                    $('#fileInput')[0].files = files;
+                    handleFileSelect();
+                }
+            });
+
+            // Form submission
+            $('#uploadForm').on('submit', handleUpload);
+        });
+
+        function loadUploadHistory() {
+            $.ajax({
+                url: `/product/api/upload-history/?page=${currentPage}&page_size=10`,
+                type: 'GET',
+                success: function(response) {
+                    if (response.status === 'success') {
+                        displayHistory(response.data);
+                        updatePagination(response.pagination);
+                    }
+                },
+                error: function() {
+                    // Silently fail for auto-refresh
+                }
+            });
+        }
+
+        function displayHistory(uploads) {
+            const tbody = $('#historyTableBody');
+            tbody.empty();
+
+            if (uploads.length === 0) {
+                tbody.append('<tr><td colspan="6" class="no-data">No upload history found</td></tr>');
+                return;
+            }
+
+            uploads.forEach(upload => {
+                const statusBadge = getStatusBadge(upload.status);
+                const progress = upload.progress_percentage || 0;
+
+                const row = `
+                    <tr>
+                        <td><strong>${upload.file_name}</strong></td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${progress}%"></div>
+                            </div>
+                            <small>${progress}%</small>
+                        </td>
+                        <td>
+                            ${upload.processed_records}/${upload.total_records}<br>
+                            <small style="color: #28a745;">✓ ${upload.successful_records}</small>
+                            <small style="color: #dc3545;">✗ ${upload.failed_records}</small>
+                        </td>
+                        <td>${upload.started_at || '-'}</td>
+                        <td>${upload.completed_at || '-'}</td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+        }
+
+        function getStatusBadge(status) {
+            const badges = {
+                'pending': '<span class="badge badge-pending">Pending</span>',
+                'processing': '<span class="badge badge-processing">Processing</span>',
+                'completed': '<span class="badge badge-completed">Completed</span>',
+                'failed': '<span class="badge badge-failed">Failed</span>'
+            };
+            return badges[status] || status;
+        }
+
+        function updatePagination(pagination) {
+            totalPages = pagination.total_pages;
+            currentPage = pagination.page;
+            $('#pageInfo').text(`Page ${currentPage} of ${totalPages} (${pagination.total_count} total)`);
+            $('#prevBtn').prop('disabled', !pagination.has_previous);
+            $('#nextBtn').prop('disabled', !pagination.has_next);
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                loadUploadHistory();
+            }
+        }
+
+        function nextPage() {
+            if (currentPage < totalPages) {
+                currentPage++;
+                loadUploadHistory();
+            }
+        }
+
+        function openUploadModal() {
+            $('#uploadModal').addClass('show');
+            resetFileSelection();
+        }
+
+        function closeUploadModal() {
+            $('#uploadModal').removeClass('show');
+            resetFileSelection();
+        }
+
+        function handleFileSelect() {
+            const file = $('#fileInput')[0].files[0];
+            if (!file) return;
+
+            const validTypes = ['.csv', '.xlsx'];
+            const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+
+            if (!validTypes.includes(fileExtension)) {
+                showAlert('Invalid file type. Please upload a CSV or Excel file.', 'error');
+                resetFileSelection();
+                return;
+            }
+
+            const maxSize = 100 * 1024 * 1024; // 100MB
+            if (file.size > maxSize) {
+                showAlert('File is too large. Maximum size is 100MB.', 'error');
+                resetFileSelection();
+                return;
+            }
+
+            selectedFile = file;
+            $('#fileName').text(file.name);
+            $('#fileSize').text(formatFileSize(file.size));
+            $('#fileInfo').addClass('show');
+            $('#uploadBtn').show();
+        }
+
+        function resetFileSelection() {
+            $('#fileInput').val('');
+            selectedFile = null;
+            $('#fileInfo').removeClass('show');
+            $('#uploadBtn').hide();
+            $('#uploadProgress').removeClass('show');
+            $('#progressFill').css('width', '0%');
+        }
+
+        function handleUpload(e) {
+            e.preventDefault();
+
+            if (!selectedFile) {
+                showAlert('Please select a file to upload.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            const csrfToken = $('[name=csrfmiddlewaretoken]').val();
+
+            $('#uploadBtn').prop('disabled', true).text('Uploading...');
+            $('#uploadProgress').addClass('show');
+
+            $.ajax({
+                url: '/product/api/upload-file/',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                headers: {'X-CSRFToken': csrfToken},
+                xhr: function() {
+                    const xhr = new window.XMLHttpRequest();
+                    xhr.upload.addEventListener('progress', function(e) {
+                        if (e.lengthComputable) {
+                            const percent = Math.round((e.loaded / e.total) * 100);
+                            $('#progressFill').css('width', percent + '%');
+                            $('#progressText').text(`Uploading... ${percent}%`);
+                        }
+                    });
+                    return xhr;
+                },
+                success: function(response) {
+                    if (response.status === 'success') {
+                        showAlert('File uploaded successfully! Processing started in background.', 'success');
+                        closeUploadModal();
+                        loadUploadHistory();
+                    } else {
+                        showAlert(response.message || 'Upload failed', 'error');
+                    }
+                    $('#uploadBtn').prop('disabled', false).text('Upload and Process');
+                },
+                error: function(xhr) {
+                    const message = xhr.responseJSON?.message || 'Upload failed. Please try again.';
+                    showAlert(message, 'error');
+                    $('#uploadBtn').prop('disabled', false).text('Upload and Process');
+                }
+            });
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        function showAlert(message, type) {
+            const alertClass = type === 'success' ? 'alert-success' : 'alert-error';
+            const alert = `<div class="alert ${alertClass}">${message}</div>`;
+            $('#alertContainer').html(alert);
+
+            setTimeout(() => {
+                $('#alertContainer').empty();
+            }, 5000);
+        }
+
+        // Close modal on outside click
+        $(document).on('click', '.modal', function(e) {
+            if (e.target === this) {
+                closeUploadModal();
+            }
+        });
+
+        // Clear interval on page unload
+        $(window).on('beforeunload', function() {
+            clearInterval(refreshInterval);
+        });
+    </script>
+</body>
+</html>

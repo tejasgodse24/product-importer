@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Management</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 28px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+
+        .search-box {
+            margin-bottom: 20px;
+        }
+
+        .search-box input {
+            width: 100%;
+            max-width: 400px;
+            padding: 12px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        tr:hover {
+            background: #f8f9ff;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .pagination button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination .page-info {
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            font-size: 22px;
+            color: #333;
+        }
+
+        .close-btn {
+            font-size: 28px;
+            color: #999;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Product Management</h1>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="openCreateModal()">+ Create Product</button>
+                <a href="/product/upload/" class="btn btn-secondary">📁 Bulk Insert Using File</a>
+            </div>
+        </div>
+
+        <div id="alertContainer"></div>
+
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Search by SKU, Name, or Description...">
+        </div>
+
+        <div id="loadingContainer" class="loading" style="display: none;">
+            Loading products...
+        </div>
+
+        <div id="tableContainer">
+            <table id="productTable">
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="productTableBody">
+                    <!-- Data will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <button id="prevBtn" onclick="prevPage()">Previous</button>
+            <span class="page-info" id="pageInfo">Page 1 of 1</span>
+            <button id="nextBtn" onclick="nextPage()">Next</button>
+        </div>
+    </div>
+
+    <!-- Create/Edit Modal -->
+    <div id="productModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Create Product</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+
+            <form id="productForm">
+                {% csrf_token %}
+                <input type="hidden" id="productId">
+
+                <div class="form-group">
+                    <label for="sku">SKU *</label>
+                    <input type="text" id="sku" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="name">Name *</label>
+                    <input type="text" id="name" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="isActive" checked>
+                        <label for="isActive">Active</label>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let totalPages = 1;
+        let searchTimeout;
+
+        // Load products on page load
+        $(document).ready(function() {
+            loadProducts();
+
+            // Search with debounce
+            $('#searchInput').on('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    currentPage = 1;
+                    loadProducts();
+                }, 500);
+            });
+        });
+
+        function loadProducts() {
+            const search = $('#searchInput').val();
+
+            $('#loadingContainer').show();
+            $('#tableContainer').hide();
+
+            $.ajax({
+                url: `/product/api/products/?page=${currentPage}&page_size=20&search=${search}`,
+                type: 'GET',
+                success: function(response) {
+                    if (response.status === 'success') {
+                        displayProducts(response.data);
+                        updatePagination(response.pagination);
+                    }
+                    $('#loadingContainer').hide();
+                    $('#tableContainer').show();
+                },
+                error: function(xhr) {
+                    $('#loadingContainer').hide();
+                    $('#tableContainer').show();
+                    showAlert('Failed to load products', 'error');
+                }
+            });
+        }
+
+        function displayProducts(products) {
+            const tbody = $('#productTableBody');
+            tbody.empty();
+
+            if (products.length === 0) {
+                tbody.append('<tr><td colspan="6" class="no-data">No products found</td></tr>');
+                return;
+            }
+
+            products.forEach(product => {
+                const row = `
+                    <tr>
+                        <td><strong>${product.sku}</strong></td>
+                        <td>${product.name}</td>
+                        <td>${product.description || '-'}</td>
+                        <td>
+                            <span class="badge ${product.is_active ? 'badge-active' : 'badge-inactive'}">
+                                ${product.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                        </td>
+                        <td>${product.created_at}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn btn-warning btn-sm" onclick="openEditModal(${product.id})">Edit</button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteProduct(${product.id}, '${product.sku}')">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+        }
+
+        function updatePagination(pagination) {
+            totalPages = pagination.total_pages;
+            currentPage = pagination.page;
+
+            $('#pageInfo').text(`Page ${currentPage} of ${totalPages} (${pagination.total_count} total)`);
+            $('#prevBtn').prop('disabled', !pagination.has_previous);
+            $('#nextBtn').prop('disabled', !pagination.has_next);
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                loadProducts();
+            }
+        }
+
+        function nextPage() {
+            if (currentPage < totalPages) {
+                currentPage++;
+                loadProducts();
+            }
+        }
+
+        function openCreateModal() {
+            $('#modalTitle').text('Create Product');
+            $('#productForm')[0].reset();
+            $('#productId').val('');
+            $('#isActive').prop('checked', true);
+            $('#productModal').addClass('show');
+        }
+
+        function openEditModal(productId) {
+            $.ajax({
+                url: `/product/api/products/${productId}/`,
+                type: 'GET',
+                success: function(response) {
+                    if (response.status === 'success') {
+                        const product = response.data;
+                        $('#modalTitle').text('Edit Product');
+                        $('#productId').val(product.id);
+                        $('#sku').val(product.sku);
+                        $('#name').val(product.name);
+                        $('#description').val(product.description);
+                        $('#isActive').prop('checked', product.is_active);
+                        $('#productModal').addClass('show');
+                    }
+                },
+                error: function() {
+                    showAlert('Failed to load product details', 'error');
+                }
+            });
+        }
+
+        function closeModal() {
+            $('#productModal').removeClass('show');
+        }
+
+        $('#productForm').on('submit', function(e) {
+            e.preventDefault();
+
+            const productId = $('#productId').val();
+            const data = {
+                sku: $('#sku').val(),
+                name: $('#name').val(),
+                description: $('#description').val(),
+                is_active: $('#isActive').is(':checked')
+            };
+
+            const csrfToken = $('[name=csrfmiddlewaretoken]').val();
+
+            if (productId) {
+                // Update
+                $.ajax({
+                    url: `/product/api/products/${productId}/update/`,
+                    type: 'PUT',
+                    contentType: 'application/json',
+                    headers: {'X-CSRFToken': csrfToken},
+                    data: JSON.stringify(data),
+                    success: function(response) {
+                        closeModal();
+                        showAlert(response.message, 'success');
+                        loadProducts();
+                    },
+                    error: function(xhr) {
+                        const message = xhr.responseJSON?.message || 'Failed to update product';
+                        showAlert(message, 'error');
+                    }
+                });
+            } else {
+                // Create
+                $.ajax({
+                    url: '/product/api/products/create/',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    headers: {'X-CSRFToken': csrfToken},
+                    data: JSON.stringify(data),
+                    success: function(response) {
+                        closeModal();
+                        showAlert(response.message, 'success');
+                        loadProducts();
+                    },
+                    error: function(xhr) {
+                        const message = xhr.responseJSON?.message || 'Failed to create product';
+                        showAlert(message, 'error');
+                    }
+                });
+            }
+        });
+
+        function deleteProduct(productId, sku) {
+            if (!confirm(`Are you sure you want to delete product "${sku}"?`)) {
+                return;
+            }
+
+            const csrfToken = $('[name=csrfmiddlewaretoken]').val();
+
+            $.ajax({
+                url: `/product/api/products/${productId}/delete/`,
+                type: 'DELETE',
+                headers: {'X-CSRFToken': csrfToken},
+                success: function(response) {
+                    showAlert(response.message, 'success');
+                    loadProducts();
+                },
+                error: function() {
+                    showAlert('Failed to delete product', 'error');
+                }
+            });
+        }
+
+        function showAlert(message, type) {
+            const alertClass = type === 'success' ? 'alert-success' : 'alert-error';
+            const alert = `<div class="alert ${alertClass}">${message}</div>`;
+            $('#alertContainer').html(alert);
+
+            setTimeout(() => {
+                $('#alertContainer').empty();
+            }, 5000);
+        }
+
+        // Close modal on outside click
+        $(document).on('click', '.modal', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
