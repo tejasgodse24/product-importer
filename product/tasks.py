@@ -163,24 +163,45 @@ def process_csv_file(self, upload_id, s3_file_url, file_extension):
         else:
             raise ValueError(f"Unsupported file type: {file_extension}")
 
-        # Mark as completed
-        upload_record.status = 'completed'
+        # Update upload record
         upload_record.completed_at = timezone.now()
         upload_record.total_records = stats['total']
         upload_record.successful_records = stats['successful']
         upload_record.failed_records = stats['failed']
-        upload_record.save()
 
-        # Trigger bulk_upload_complete webhook
-        trigger_webhook.delay('bulk_upload_complete', {
-            'upload_id': upload_id,
-            'file_name': upload_record.file_name,
-            'total_records': stats['total'],
-            'successful_records': stats['successful'],
-            'failed_records': stats['failed'],
-            'started_at': upload_record.started_at.isoformat(),
-            'completed_at': upload_record.completed_at.isoformat(),
-        })
+        # Check if there are any failed records
+        if stats['failed'] > 0:
+            # Mark as failed if there are any failed records
+            upload_record.status = 'failed'
+            upload_record.error_message = f"{stats['failed']} out of {stats['total']} records failed to process. This may be due to duplicate SKUs in the CSV file."
+            upload_record.save()
+
+            # Trigger bulk_upload_failed webhook
+            trigger_webhook.delay('bulk_upload_failed', {
+                'upload_id': upload_id,
+                'file_name': upload_record.file_name,
+                'total_records': stats['total'],
+                'successful_records': stats['successful'],
+                'failed_records': stats['failed'],
+                'error_message': upload_record.error_message,
+                'started_at': upload_record.started_at.isoformat(),
+                'failed_at': upload_record.completed_at.isoformat(),
+            })
+        else:
+            # Mark as completed only if all records processed successfully
+            upload_record.status = 'completed'
+            upload_record.save()
+
+            # Trigger bulk_upload_complete webhook
+            trigger_webhook.delay('bulk_upload_complete', {
+                'upload_id': upload_id,
+                'file_name': upload_record.file_name,
+                'total_records': stats['total'],
+                'successful_records': stats['successful'],
+                'failed_records': stats['failed'],
+                'started_at': upload_record.started_at.isoformat(),
+                'completed_at': upload_record.completed_at.isoformat(),
+            })
 
         return {
             'status': 'success',
@@ -264,11 +285,22 @@ def process_csv_streaming(upload_record, s3_uri, transport_params):
             if len(batch) >= batch_size:
                 batch_num += 1
                 print(f"batch {batch_num} processing started")
-                result = process_batch(batch)
-                
+
+                # De-duplicate batch (keep last occurrence of each SKU)
+                unique_batch = {}
+                for product in batch:
+                    unique_batch[product.sku] = product
+                deduplicated_batch = list(unique_batch.values())
+
+                duplicates_removed = len(batch) - len(deduplicated_batch)
+                if duplicates_removed > 0:
+                    print(f"batch {batch_num}: Removed {duplicates_removed} duplicate SKUs")
+
+                result = process_batch(deduplicated_batch)
+
                 total_successful += result['successful']
-                total_failed += result['failed']
-                total_processed += result['successful'] + result['failed']
+                total_failed += result['failed'] + duplicates_removed
+                total_processed += result['successful'] + result['failed'] + duplicates_removed
 
                 print(f"batch {batch_num} processing done: {str(result)}")
 
@@ -289,12 +321,23 @@ def process_csv_streaming(upload_record, s3_uri, transport_params):
         # Process remaining rows
         if batch:
             batch_num += 1
-            result = process_batch(batch)
-            
+
+            # De-duplicate final batch (keep last occurrence of each SKU)
+            unique_batch = {}
+            for product in batch:
+                unique_batch[product.sku] = product
+            deduplicated_batch = list(unique_batch.values())
+
+            duplicates_removed = len(batch) - len(deduplicated_batch)
+            if duplicates_removed > 0:
+                print(f"Final batch {batch_num}: Removed {duplicates_removed} duplicate SKUs")
+
+            result = process_batch(deduplicated_batch)
+
             total_successful += result['successful']
-            total_failed += result['failed']
-            total_processed += result['successful'] + result['failed']
-            
+            total_failed += result['failed'] + duplicates_removed
+            total_processed += result['successful'] + result['failed'] + duplicates_removed
+
             # upload_record.processed_records = total_processed
             # upload_record.successful_records = total_successful
             # upload_record.failed_records = total_failed
