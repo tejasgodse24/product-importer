@@ -298,8 +298,9 @@ def process_csv_streaming(upload_record, s3_uri, transport_params):
 
                 result = process_batch(deduplicated_batch)
 
-                total_successful += result['successful']
-                total_failed += result['failed'] + duplicates_removed
+                # Duplicates are successfully merged/updated, count as success
+                total_successful += result['successful'] + duplicates_removed
+                total_failed += result['failed']  # Only actual errors
                 total_processed += result['successful'] + result['failed'] + duplicates_removed
 
                 print(f"batch {batch_num} processing done: {str(result)}")
@@ -334,8 +335,9 @@ def process_csv_streaming(upload_record, s3_uri, transport_params):
 
             result = process_batch(deduplicated_batch)
 
-            total_successful += result['successful']
-            total_failed += result['failed'] + duplicates_removed
+            # Duplicates are successfully merged/updated, count as success
+            total_successful += result['successful'] + duplicates_removed
+            total_failed += result['failed']  # Only actual errors
             total_processed += result['successful'] + result['failed'] + duplicates_removed
 
             # upload_record.processed_records = total_processed

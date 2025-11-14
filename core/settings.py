@@ -132,7 +132,7 @@ USE_TZ = True
 # MEDIA_ROOT =  os.path.join(BASE_DIR, 'public/media') 
 # MEDIA_URL = '/media/'
 
-# localhost
+# prod
 STATIC_ROOT = os.path.join(BASE_DIR, '/var/www/product-importer/static')
 STATIC_URL = '/static/'
 MEDIA_ROOT =  os.path.join(BASE_DIR, '/var/www/product-importer/media') 
