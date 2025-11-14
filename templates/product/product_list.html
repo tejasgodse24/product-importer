@@ -305,6 +305,32 @@
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
+
+        .bulk-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .bulk-actions-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .selected-count {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .btn-bulk-delete {
+            display: none;
+        }
+
+        .btn-bulk-delete.show {
+            display: inline-block;
+        }
     </style>
 </head>
 <body>
@@ -319,8 +345,16 @@
 
         <div id="alertContainer"></div>
 
-        <div class="search-box">
-            <input type="text" id="searchInput" placeholder="Search by SKU, Name, or Description...">
+        <div class="bulk-actions">
+            <div class="bulk-actions-left">
+                <span class="selected-count" id="selectedCount">0 selected</span>
+                <button class="btn btn-danger btn-sm btn-bulk-delete" id="bulkDeleteBtn" onclick="bulkDeleteProducts()">
+                    Delete Selected
+                </button>
+            </div>
+            <div class="search-box" style="margin-bottom: 0;">
+                <input type="text" id="searchInput" placeholder="Search by SKU, Name, or Description...">
+            </div>
         </div>
 
         <div id="loadingContainer" class="loading" style="display: none;">
@@ -331,6 +365,9 @@
             <table id="productTable">
                 <thead>
                     <tr>
+                        <th style="width: 40px;">
+                            <input type="checkbox" id="selectAll" onclick="toggleSelectAll()">
+                        </th>
                         <th>SKU</th>
                         <th>Name</th>
                         <th>Description</th>
@@ -398,6 +435,7 @@
         let currentPage = 1;
         let totalPages = 1;
         let searchTimeout;
+        let selectedProducts = []; // Track selected product IDs
 
         // Load products on page load
         $(document).ready(function() {
@@ -442,14 +480,22 @@
             const tbody = $('#productTableBody');
             tbody.empty();
 
+            // Reset selections when loading new products
+            selectedProducts = [];
+            $('#selectAll').prop('checked', false);
+            updateSelectedCount();
+
             if (products.length === 0) {
-                tbody.append('<tr><td colspan="6" class="no-data">No products found</td></tr>');
+                tbody.append('<tr><td colspan="7" class="no-data">No products found</td></tr>');
                 return;
             }
 
             products.forEach(product => {
                 const row = `
                     <tr>
+                        <td>
+                            <input type="checkbox" class="product-checkbox" value="${product.id}" onchange="onProductCheckChange(this)">
+                        </td>
                         <td><strong>${product.sku}</strong></td>
                         <td>${product.name}</td>
                         <td>${product.description || '-'}</td>
@@ -609,6 +655,86 @@
             setTimeout(() => {
                 $('#alertContainer').empty();
             }, 5000);
+        }
+
+        // ============= BULK DELETE FUNCTIONS =============
+
+        function toggleSelectAll() {
+            const isChecked = $('#selectAll').is(':checked');
+            $('.product-checkbox').prop('checked', isChecked);
+
+            if (isChecked) {
+                // Select all visible products
+                selectedProducts = [];
+                $('.product-checkbox').each(function() {
+                    selectedProducts.push(parseInt($(this).val()));
+                });
+            } else {
+                // Deselect all
+                selectedProducts = [];
+            }
+
+            updateSelectedCount();
+        }
+
+        function onProductCheckChange(checkbox) {
+            const productId = parseInt($(checkbox).val());
+
+            if ($(checkbox).is(':checked')) {
+                // Add to selected
+                if (!selectedProducts.includes(productId)) {
+                    selectedProducts.push(productId);
+                }
+            } else {
+                // Remove from selected
+                selectedProducts = selectedProducts.filter(id => id !== productId);
+                $('#selectAll').prop('checked', false);
+            }
+
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            const count = selectedProducts.length;
+            $('#selectedCount').text(`${count} selected`);
+
+            if (count > 0) {
+                $('#bulkDeleteBtn').addClass('show');
+            } else {
+                $('#bulkDeleteBtn').removeClass('show');
+            }
+        }
+
+        function bulkDeleteProducts() {
+            if (selectedProducts.length === 0) {
+                showAlert('Please select products to delete', 'error');
+                return;
+            }
+
+            const count = selectedProducts.length;
+            if (!confirm(`Are you sure you want to delete ${count} product(s)? This action cannot be undone.`)) {
+                return;
+            }
+
+            const csrfToken = $('[name=csrfmiddlewaretoken]').val();
+
+            $.ajax({
+                url: '/product/api/products/bulk-delete/',
+                type: 'POST',
+                contentType: 'application/json',
+                headers: {'X-CSRFToken': csrfToken},
+                data: JSON.stringify({ product_ids: selectedProducts }),
+                success: function(response) {
+                    showAlert(response.message, 'success');
+                    selectedProducts = [];
+                    updateSelectedCount();
+                    loadProducts();
+                },
+                error: function(xhr) {
+                    const message = xhr.responseJSON?.message || 'Failed to delete products';
+                    showAlert(message, 'error');
+                }
+            });
         }
 
         // Close modal on outside click

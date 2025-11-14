@@ -12,6 +12,7 @@ urlpatterns = [
     path('api/products/create/', views.product_create_api, name='product_create_api'),
     path('api/products/<int:product_id>/update/', views.product_update_api, name='product_update_api'),
     path('api/products/<int:product_id>/delete/', views.product_delete_api, name='product_delete_api'),
+    path('api/products/bulk-delete/', views.product_bulk_delete_api, name='product_bulk_delete_api'),
 
     # Upload API endpoints
     path('api/upload-file/', views.upload_file, name='upload_file'),

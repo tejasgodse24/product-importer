@@ -354,6 +354,49 @@ def product_delete_api(request, product_id):
         }, status=500)
 
 
+@require_http_methods(["POST"])
+def product_bulk_delete_api(request):
+    """API to delete multiple products"""
+    try:
+        data = json.loads(request.body)
+        product_ids = data.get('product_ids', [])
+
+        if not product_ids:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'No products selected'
+            }, status=400)
+
+        # Get products to delete
+        products = Product.objects.filter(id__in=product_ids)
+        count = products.count()
+
+        if count == 0:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'No products found with the given IDs'
+            }, status=404)
+
+        # Delete products
+        products.delete()
+
+        return JsonResponse({
+            'status': 'success',
+            'message': f'{count} product(s) deleted successfully'
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Invalid JSON data'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
 # ============= UPLOAD HISTORY API =============
 
 @require_http_methods(["GET"])
