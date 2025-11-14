@@ -77,16 +77,7 @@ DATABASES = {
     }
 }
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'postgres',
-#         'USER': 'postgres',
-#         'PASSWORD': 'Te24Ja10S2001',
-#         'HOST': 'fulfil-postgresql-db.cpu6mew8q04q.ap-south-1.rds.amazonaws.com',
-#         'PORT': '5432'
-#     }
-# }
+
 
 
 # Password validation
