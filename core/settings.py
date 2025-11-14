@@ -126,10 +126,16 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
+# # localhost
+# STATIC_ROOT = os.path.join(BASE_DIR, 'public/static')
+# STATIC_URL = '/static/'
+# MEDIA_ROOT =  os.path.join(BASE_DIR, 'public/media') 
+# MEDIA_URL = '/media/'
+
 # localhost
-STATIC_ROOT = os.path.join(BASE_DIR, 'public/static')
+STATIC_ROOT = os.path.join(BASE_DIR, '/var/www/product-importer/static')
 STATIC_URL = '/static/'
-MEDIA_ROOT =  os.path.join(BASE_DIR, 'public/media') 
+MEDIA_ROOT =  os.path.join(BASE_DIR, '/var/www/product-importer/media') 
 MEDIA_URL = '/media/'
 
 # Default primary key field type
