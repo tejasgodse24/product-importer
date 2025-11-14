@@ -14,10 +14,12 @@ urlpatterns = [
     path('api/products/<int:product_id>/update/', views.product_update_api, name='product_update_api'),
     path('api/products/<int:product_id>/delete/', views.product_delete_api, name='product_delete_api'),
     path('api/products/bulk-delete/', views.product_bulk_delete_api, name='product_bulk_delete_api'),
+    path('api/products/delete-all/', views.product_delete_all_api, name='product_delete_all_api'),
 
     # Upload API endpoints
     path('api/upload-file/', views.upload_file, name='upload_file'),
     path('api/upload-history/', views.upload_history_api, name='upload_history_api'),
+    path('api/upload-retry/<int:upload_id>/', views.upload_retry_api, name='upload_retry_api'),
 
     # Webhook API endpoints
     path('api/webhooks/', views.webhook_list_api, name='webhook_list_api'),

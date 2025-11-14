@@ -152,21 +152,49 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px;
+            gap: 5px;
             margin-top: 20px;
+            flex-wrap: wrap;
         }
 
         .pagination button {
-            padding: 8px 16px;
+            padding: 8px 12px;
             border: 1px solid #ddd;
             background: white;
             border-radius: 4px;
             cursor: pointer;
+            min-width: 40px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: #f0f2ff;
+            border-color: #667eea;
+            color: #667eea;
         }
 
         .pagination button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+        }
+
+        .pagination button.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+            font-weight: 600;
+        }
+
+        .pagination .page-info {
+            color: #666;
+            font-size: 14px;
+            padding: 0 10px;
+        }
+
+        .pagination .ellipsis {
+            padding: 8px 5px;
+            color: #999;
         }
 
         /* Modal Styles */
@@ -387,10 +415,8 @@
             </table>
         </div>
 
-        <div class="pagination">
-            <button id="prevBtn" onclick="prevPage()">Previous</button>
-            <span class="page-info" id="pageInfo">Page 1 of 1</span>
-            <button id="nextBtn" onclick="nextPage()">Next</button>
+        <div class="pagination" id="paginationContainer">
+            <!-- Pagination buttons will be dynamically generated here -->
         </div>
     </div>
 
@@ -540,9 +566,74 @@
         function updatePagination(pagination) {
             totalPages = pagination.total_pages;
             currentPage = pagination.page;
-            $('#pageInfo').text(`Page ${currentPage} of ${totalPages} (${pagination.total_count} total)`);
-            $('#prevBtn').prop('disabled', !pagination.has_previous);
-            $('#nextBtn').prop('disabled', !pagination.has_next);
+
+            const container = $('#paginationContainer');
+            container.empty();
+
+            if (totalPages <= 1) {
+                return; // No pagination needed
+            }
+
+            // Previous button
+            const prevBtn = $('<button>')
+                .text('« Previous')
+                .prop('disabled', !pagination.has_previous)
+                .on('click', prevPage);
+            container.append(prevBtn);
+
+            // Calculate page range to show (current + next 4 pages)
+            let startPage = currentPage;
+            let endPage = Math.min(currentPage + 4, totalPages);
+
+            // Show first page if not in range
+            if (startPage > 1) {
+                const firstBtn = $('<button>')
+                    .text('1')
+                    .on('click', function() { goToPage(1); });
+                container.append(firstBtn);
+
+                if (startPage > 2) {
+                    container.append($('<span class="ellipsis">...</span>'));
+                }
+            }
+
+            // Show page number buttons
+            for (let i = startPage; i <= endPage; i++) {
+                const pageBtn = $('<button>')
+                    .text(i)
+                    .toggleClass('active', i === currentPage)
+                    .on('click', function() { goToPage(i); });
+                container.append(pageBtn);
+            }
+
+            // Show ellipsis and last page if needed
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    container.append($('<span class="ellipsis">...</span>'));
+                }
+
+                const lastBtn = $('<button>')
+                    .text(totalPages)
+                    .on('click', function() { goToPage(totalPages); });
+                container.append(lastBtn);
+            }
+
+            // Next button
+            const nextBtn = $('<button>')
+                .text('Next »')
+                .prop('disabled', !pagination.has_next)
+                .on('click', nextPage);
+            container.append(nextBtn);
+
+            // Page info
+            const pageInfo = $('<span class="page-info">')
+                .text(`(${pagination.total_count} total)`);
+            container.append(pageInfo);
+        }
+
+        function goToPage(page) {
+            currentPage = page;
+            loadWebhooks();
         }
 
         function prevPage() {

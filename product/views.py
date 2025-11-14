@@ -13,7 +13,8 @@ from smart_open import open as smart_open
 import uuid
 import json
 from .models import Product, UploadHistory, Webhook
-
+from smart_open import open as smart_open
+import shutil
 
 def upload_page(request):
     """Render the upload page"""
@@ -60,7 +61,36 @@ def upload_file(request):
         s3_filename = f"uploads/{timestamp}_{unique_id}_{original_name}{file_extension}"
 
         # Upload to S3
+        # try:
+        #     s3_client = boto3.client(
+        #         's3',
+        #         aws_access_key_id=os.getenv('AWS_S3_ACCESS_KEY_ID'),
+        #         aws_secret_access_key=os.getenv('AWS_S3_SECRET_ACCESS_KEY'),
+        #         region_name=os.getenv('AWS_S3_REGION_NAME')
+        #     )
+
+        #     bucket_name = os.getenv('AWS_S3_BUCKET')
+
+        #     # Upload file to S3
+        #     s3_client.upload_fileobj(
+        #         uploaded_file,
+        #         bucket_name,
+        #         s3_filename,
+        #         ExtraArgs={'ContentType': uploaded_file.content_type}
+        #     )
+
+        #     # Generate S3 URL
+        #     s3_file_url = f"https://{bucket_name}.s3.{os.getenv('AWS_S3_REGION_NAME')}.amazonaws.com/{s3_filename}"
+
+        # except ClientError as e:
+        #     return JsonResponse({
+        #         'status': 'error',
+        #         'message': f'Failed to upload to S3: {str(e)}'
+        #     }, status=500)
+
+        # Upload to S3 using smart_open
         try:
+            # Initialize S3 client
             s3_client = boto3.client(
                 's3',
                 aws_access_key_id=os.getenv('AWS_S3_ACCESS_KEY_ID'),
@@ -69,14 +99,23 @@ def upload_file(request):
             )
 
             bucket_name = os.getenv('AWS_S3_BUCKET')
+            
+            # Construct S3 URI
+            s3_uri = f"s3://{bucket_name}/{s3_filename}"
 
-            # Upload file to S3
-            s3_client.upload_fileobj(
-                uploaded_file,
-                bucket_name,
-                s3_filename,
-                ExtraArgs={'ContentType': uploaded_file.content_type}
-            )
+            # Stream upload to S3 using smart_open (memory efficient)
+            with smart_open(
+                s3_uri,
+                'wb',
+                transport_params={
+                    'client': s3_client,
+                    'multipart_upload_kwargs': {
+                        'ContentType': uploaded_file.content_type
+                    }
+                }
+            ) as s3_file:
+                # Stream file in chunks (1MB at a time)
+                shutil.copyfileobj(uploaded_file, s3_file, length=1024*1024)
 
             # Generate S3 URL
             s3_file_url = f"https://{bucket_name}.s3.{os.getenv('AWS_S3_REGION_NAME')}.amazonaws.com/{s3_filename}"
@@ -85,6 +124,11 @@ def upload_file(request):
             return JsonResponse({
                 'status': 'error',
                 'message': f'Failed to upload to S3: {str(e)}'
+            }, status=500)
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Failed to upload file: {str(e)}'
             }, status=500)
 
         # Create upload history record
@@ -377,9 +421,6 @@ def product_bulk_delete_api(request):
                 'message': 'No products found with the given IDs'
             }, status=404)
 
-        # Collect product info before deletion
-        deleted_products = list(products.values('id', 'sku', 'name'))
-
         # Delete products
         products.delete()
 
@@ -387,7 +428,6 @@ def product_bulk_delete_api(request):
         from .tasks import trigger_webhook
         trigger_webhook.delay('bulk_delete_complete', {
             'deleted_count': count,
-            'deleted_products': deleted_products,
             'timestamp': timezone.now().isoformat(),
         })
 
@@ -405,6 +445,42 @@ def product_bulk_delete_api(request):
         return JsonResponse({
             'status': 'error',
             'message': str(e)
+        }, status=500)
+
+
+@require_http_methods(["DELETE"])
+def product_delete_all_api(request):
+    """API to delete all products from the database"""
+    try:
+        # Get total count before deletion
+        total_count = Product.objects.count()
+
+        if total_count == 0:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'No products found to delete'
+            }, status=404)
+
+        # Delete all products
+        Product.objects.all().delete()
+
+        # Trigger bulk_delete_complete webhook
+        from .tasks import trigger_webhook
+        trigger_webhook.delay('bulk_delete_complete', {
+            'deleted_count': total_count,
+            'delete_all': True,
+            'timestamp': timezone.now().isoformat(),
+        })
+
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Successfully deleted all {total_count} product(s)'
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Failed to delete products: {str(e)}'
         }, status=500)
 
 
@@ -456,6 +532,59 @@ def upload_history_api(request):
         return JsonResponse({
             'status': 'error',
             'message': str(e)
+        }, status=500)
+
+
+@require_http_methods(["POST"])
+def upload_retry_api(request, upload_id):
+    """API to retry a failed upload"""
+    try:
+        # Get the failed upload record
+        upload_record = get_object_or_404(UploadHistory, id=upload_id)
+
+        # Check if upload is in failed status
+        if upload_record.status != 'failed':
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Only failed uploads can be retried'
+            }, status=400)
+
+        # Check if file still exists in S3
+        if not upload_record.file_path:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'File path not found for this upload'
+            }, status=400)
+
+        # Reset upload record for retry
+        upload_record.status = 'pending'
+        upload_record.error_message = None
+        upload_record.processed_records = 0
+        upload_record.successful_records = 0
+        upload_record.failed_records = 0
+        upload_record.total_records = 0
+        upload_record.completed_at = None
+        upload_record.started_at = timezone.now()
+        upload_record.save()
+
+        # Trigger Celery task to reprocess the file
+        from .tasks import process_csv_file
+
+        # Determine file extension
+        file_extension = '.csv' if upload_record.file_name.lower().endswith('.csv') else '.xlsx'
+
+        task = process_csv_file.delay(upload_record.id, upload_record.file_path, file_extension)
+
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Upload retry initiated successfully',
+            'upload_id': upload_record.id,
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Failed to retry upload: {str(e)}'
         }, status=500)
 
 

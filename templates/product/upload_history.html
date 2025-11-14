@@ -121,8 +121,8 @@
         }
 
         .progress-bar {
-            width: 100%;
-            height: 8px;
+            width: 200px;
+            height: 10px;
             background: #e0e0e0;
             border-radius: 4px;
             overflow: hidden;
@@ -138,21 +138,49 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px;
+            gap: 5px;
             margin-top: 20px;
+            flex-wrap: wrap;
         }
 
         .pagination button {
-            padding: 8px 16px;
+            padding: 8px 12px;
             border: 1px solid #ddd;
             background: white;
             border-radius: 4px;
             cursor: pointer;
+            min-width: 40px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: #f0f2ff;
+            border-color: #667eea;
+            color: #667eea;
         }
 
         .pagination button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+        }
+
+        .pagination button.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+            font-weight: 600;
+        }
+
+        .pagination .page-info {
+            color: #666;
+            font-size: 14px;
+            padding: 0 10px;
+        }
+
+        .pagination .ellipsis {
+            padding: 8px 5px;
+            color: #999;
         }
 
         /* Modal Styles */
@@ -268,20 +296,67 @@
             color: #999;
         }
 
-        .upload-progress {
+        .upload-loader {
             margin-top: 20px;
             display: none;
+            text-align: center;
         }
 
-        .upload-progress.show {
+        .upload-loader.show {
             display: block;
         }
 
-        .progress-text {
+        .upload-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .upload-loader-text {
             text-align: center;
-            color: #666;
+            color: #667eea;
             font-size: 14px;
-            margin-top: 10px;
+            font-weight: 600;
+        }
+
+        .error-message {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            padding: 8px;
+            margin-top: 5px;
+            font-size: 12px;
+            color: #856404;
+        }
+
+        .btn-retry {
+            background: #ffc107;
+            color: #333;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-retry:hover {
+            background: #e0a800;
+        }
+
+        .btn-retry:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
     </style>
 </head>
@@ -312,6 +387,7 @@
                         <th>Records</th>
                         <th>Started At</th>
                         <th>Completed At</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="historyTableBody">
@@ -320,10 +396,8 @@
             </table>
         </div>
 
-        <div class="pagination">
-            <button id="prevBtn" onclick="prevPage()">Previous</button>
-            <span class="page-info" id="pageInfo">Page 1 of 1</span>
-            <button id="nextBtn" onclick="nextPage()">Next</button>
+        <div class="pagination" id="paginationContainer">
+            <!-- Pagination buttons will be dynamically generated here -->
         </div>
     </div>
 
@@ -350,11 +424,9 @@
                     <span class="remove-file" id="removeFile" style="color: #dc3545; cursor: pointer; font-size: 12px; margin-top: 8px; display: inline-block;">Remove file</span>
                 </div>
 
-                <div class="upload-progress" id="uploadProgress">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progressFill"></div>
-                    </div>
-                    <div class="progress-text" id="progressText">Uploading... 0%</div>
+                <div class="upload-loader" id="uploadLoader">
+                    <div class="upload-spinner"></div>
+                    <div class="upload-loader-text">Uploading file to server...</div>
                 </div>
 
                 <button type="submit" class="btn btn-primary" id="uploadBtn" style="margin-top: 20px; width: 100%; display: none;">
@@ -439,7 +511,7 @@
             tbody.empty();
 
             if (uploads.length === 0) {
-                tbody.append('<tr><td colspan="6" class="no-data">No upload history found</td></tr>');
+                tbody.append('<tr><td colspan="7" class="no-data">No upload history found</td></tr>');
                 return;
             }
 
@@ -456,9 +528,26 @@
                     <small id="progress-text-${upload.id}">${progress}%</small>
                 ` : `<small>${progress}%</small>`;
 
+                // Error message display for failed uploads
+                const errorMessageHtml = upload.status === 'failed' && upload.error_message ? `
+                    <div class="error-message">
+                        <strong>Error:</strong> ${upload.error_message}
+                    </div>
+                ` : '';
+
+                // Retry button for failed uploads
+                const actionsHtml = upload.status === 'failed' ? `
+                    <button class="btn-retry" onclick="retryUpload(${upload.id}, '${upload.file_name}')">
+                        🔄 Retry
+                    </button>
+                ` : '-';
+
                 const row = `
                     <tr id="upload-row-${upload.id}">
-                        <td><strong>${upload.file_name}</strong></td>
+                        <td>
+                            <strong>${upload.file_name}</strong>
+                            ${errorMessageHtml}
+                        </td>
                         <td id="status-${upload.id}">${statusBadge}</td>
                         <td id="progress-container-${upload.id}">
                             ${progressHtml}
@@ -470,6 +559,7 @@
                         </td>
                         <td>${upload.started_at || '-'}</td>
                         <td id="completed-${upload.id}">${upload.completed_at || '-'}</td>
+                        <td id="actions-${upload.id}">${actionsHtml}</td>
                     </tr>
                 `;
                 tbody.append(row);
@@ -494,9 +584,74 @@
         function updatePagination(pagination) {
             totalPages = pagination.total_pages;
             currentPage = pagination.page;
-            $('#pageInfo').text(`Page ${currentPage} of ${totalPages} (${pagination.total_count} total)`);
-            $('#prevBtn').prop('disabled', !pagination.has_previous);
-            $('#nextBtn').prop('disabled', !pagination.has_next);
+
+            const container = $('#paginationContainer');
+            container.empty();
+
+            if (totalPages <= 1) {
+                return; // No pagination needed
+            }
+
+            // Previous button
+            const prevBtn = $('<button>')
+                .text('« Previous')
+                .prop('disabled', !pagination.has_previous)
+                .on('click', prevPage);
+            container.append(prevBtn);
+
+            // Calculate page range to show (current + next 4 pages)
+            let startPage = currentPage;
+            let endPage = Math.min(currentPage + 4, totalPages);
+
+            // Show first page if not in range
+            if (startPage > 1) {
+                const firstBtn = $('<button>')
+                    .text('1')
+                    .on('click', function() { goToPage(1); });
+                container.append(firstBtn);
+
+                if (startPage > 2) {
+                    container.append($('<span class="ellipsis">...</span>'));
+                }
+            }
+
+            // Show page number buttons
+            for (let i = startPage; i <= endPage; i++) {
+                const pageBtn = $('<button>')
+                    .text(i)
+                    .toggleClass('active', i === currentPage)
+                    .on('click', function() { goToPage(i); });
+                container.append(pageBtn);
+            }
+
+            // Show ellipsis and last page if needed
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    container.append($('<span class="ellipsis">...</span>'));
+                }
+
+                const lastBtn = $('<button>')
+                    .text(totalPages)
+                    .on('click', function() { goToPage(totalPages); });
+                container.append(lastBtn);
+            }
+
+            // Next button
+            const nextBtn = $('<button>')
+                .text('Next »')
+                .prop('disabled', !pagination.has_next)
+                .on('click', nextPage);
+            container.append(nextBtn);
+
+            // Page info
+            const pageInfo = $('<span class="page-info">')
+                .text(`(${pagination.total_count} total)`);
+            container.append(pageInfo);
+        }
+
+        function goToPage(page) {
+            currentPage = page;
+            loadUploadHistory();
         }
 
         function prevPage() {
@@ -555,8 +710,7 @@
             selectedFile = null;
             $('#fileInfo').removeClass('show');
             $('#uploadBtn').hide();
-            $('#uploadProgress').removeClass('show');
-            $('#progressFill').css('width', '0%');
+            $('#uploadLoader').removeClass('show');
         }
 
         function handleUpload(e) {
@@ -573,7 +727,7 @@
             const csrfToken = $('[name=csrfmiddlewaretoken]').val();
 
             $('#uploadBtn').prop('disabled', true).text('Uploading...');
-            $('#uploadProgress').addClass('show');
+            $('#uploadLoader').addClass('show');
 
             $.ajax({
                 url: '/product/api/upload-file/',
@@ -582,17 +736,6 @@
                 processData: false,
                 contentType: false,
                 headers: {'X-CSRFToken': csrfToken},
-                xhr: function() {
-                    const xhr = new window.XMLHttpRequest();
-                    xhr.upload.addEventListener('progress', function(e) {
-                        if (e.lengthComputable) {
-                            const percent = Math.round((e.loaded / e.total) * 100);
-                            $('#progressFill').css('width', percent + '%');
-                            $('#progressText').text(`Uploading... ${percent}%`);
-                        }
-                    });
-                    return xhr;
-                },
                 success: function(response) {
                     if (response.status === 'success') {
                         showAlert('File uploaded successfully! Processing started in background.', 'success');
@@ -719,6 +862,44 @@
                     loadUploadHistory();
                 }, 1000);
             }
+        }
+
+        function retryUpload(uploadId, fileName) {
+            if (!confirm(`Are you sure you want to retry uploading "${fileName}"?`)) {
+                return;
+            }
+
+            const csrfToken = $('[name=csrfmiddlewaretoken]').val();
+
+            // Disable retry button
+            $(`#actions-${uploadId}`).html('<button class="btn-retry" disabled>Retrying...</button>');
+
+            $.ajax({
+                url: `/product/api/upload-retry/${uploadId}/`,
+                type: 'POST',
+                headers: {'X-CSRFToken': csrfToken},
+                success: function(response) {
+                    if (response.status === 'success') {
+                        showAlert('Upload retry initiated. Processing will start shortly.', 'success');
+
+                        // Connect WebSocket for the retried upload
+                        connectWebSocket(uploadId);
+
+                        // Reload to see updated status
+                        setTimeout(() => {
+                            loadUploadHistory();
+                        }, 1000);
+                    } else {
+                        showAlert(response.message || 'Retry failed', 'error');
+                        loadUploadHistory();
+                    }
+                },
+                error: function(xhr) {
+                    const message = xhr.responseJSON?.message || 'Retry failed. Please try again.';
+                    showAlert(message, 'error');
+                    loadUploadHistory();
+                }
+            });
         }
 
         // Close modal on outside click
