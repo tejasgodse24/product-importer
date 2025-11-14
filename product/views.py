@@ -12,7 +12,7 @@ from datetime import datetime
 from smart_open import open as smart_open
 import uuid
 import json
-from .models import Product, UploadHistory
+from .models import Product, UploadHistory, Webhook
 
 
 def upload_page(request):
@@ -377,8 +377,19 @@ def product_bulk_delete_api(request):
                 'message': 'No products found with the given IDs'
             }, status=404)
 
+        # Collect product info before deletion
+        deleted_products = list(products.values('id', 'sku', 'name'))
+
         # Delete products
         products.delete()
+
+        # Trigger bulk_delete_complete webhook
+        from .tasks import trigger_webhook
+        trigger_webhook.delay('bulk_delete_complete', {
+            'deleted_count': count,
+            'deleted_products': deleted_products,
+            'timestamp': timezone.now().isoformat(),
+        })
 
         return JsonResponse({
             'status': 'success',
@@ -440,6 +451,282 @@ def upload_history_api(request):
                 'has_previous': page_obj.has_previous(),
             }
         })
+
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+# ============= WEBHOOK MANAGEMENT VIEWS =============
+
+def webhook_page(request):
+    """Render webhook management page"""
+    return render(request, 'product/webhook_management.html')
+
+
+@require_http_methods(["GET"])
+def webhook_list_api(request):
+    """API to get all webhooks with pagination"""
+    try:
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 20))
+
+        # Get webhooks
+        webhooks = Webhook.objects.all().order_by('-created_at')
+
+        # Pagination
+        paginator = Paginator(webhooks, page_size)
+        page_obj = paginator.get_page(page)
+
+        # Serialize data
+        webhooks_data = [{
+            'id': w.id,
+            'url': w.url,
+            'event_type': w.event_type,
+            'event_type_display': w.get_event_type_display(),
+            'is_active': w.is_active,
+            'description': w.description,
+            'last_triggered_at': w.last_triggered_at.strftime('%Y-%m-%d %H:%M:%S') if w.last_triggered_at else None,
+            'last_response_code': w.last_response_code,
+            'last_response_time': w.last_response_time,
+            'retry_count': w.retry_count,
+            'created_at': w.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        } for w in page_obj]
+
+        return JsonResponse({
+            'status': 'success',
+            'data': webhooks_data,
+            'pagination': {
+                'page': page,
+                'page_size': page_size,
+                'total_pages': paginator.num_pages,
+                'total_count': paginator.count,
+                'has_next': page_obj.has_next(),
+                'has_previous': page_obj.has_previous(),
+            }
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@require_http_methods(["POST"])
+def webhook_create_api(request):
+    """API to create new webhook"""
+    try:
+        data = json.loads(request.body)
+
+        # Validate required fields
+        url = data.get('url', '').strip()
+        event_type = data.get('event_type', '').strip()
+
+        if not url or not event_type:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'URL and Event Type are required'
+            }, status=400)
+
+        # Validate event type
+        valid_events = [choice[0] for choice in Webhook.EVENT_CHOICES]
+        if event_type not in valid_events:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Invalid event type. Must be one of: {", ".join(valid_events)}'
+            }, status=400)
+
+        # Create webhook
+        webhook = Webhook.objects.create(
+            url=url,
+            event_type=event_type,
+            description=data.get('description', ''),
+            is_active=data.get('is_active', True),
+            retry_count=data.get('retry_count', 3)
+        )
+
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Webhook created successfully',
+            'data': {
+                'id': webhook.id,
+                'url': webhook.url,
+                'event_type': webhook.event_type,
+                'event_type_display': webhook.get_event_type_display(),
+                'is_active': webhook.is_active,
+                'description': webhook.description,
+            }
+        }, status=201)
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Invalid JSON data'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@require_http_methods(["PUT", "PATCH"])
+def webhook_update_api(request, webhook_id):
+    """API to update webhook"""
+    try:
+        webhook = get_object_or_404(Webhook, id=webhook_id)
+        data = json.loads(request.body)
+
+        # Update fields if provided
+        if 'url' in data:
+            webhook.url = data['url'].strip()
+
+        if 'event_type' in data:
+            event_type = data['event_type'].strip()
+            valid_events = [choice[0] for choice in Webhook.EVENT_CHOICES]
+            if event_type not in valid_events:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Invalid event type. Must be one of: {", ".join(valid_events)}'
+                }, status=400)
+            webhook.event_type = event_type
+
+        if 'description' in data:
+            webhook.description = data['description'].strip()
+
+        if 'is_active' in data:
+            webhook.is_active = data['is_active']
+
+        if 'retry_count' in data:
+            webhook.retry_count = int(data['retry_count'])
+
+        webhook.save()
+
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Webhook updated successfully',
+            'data': {
+                'id': webhook.id,
+                'url': webhook.url,
+                'event_type': webhook.event_type,
+                'event_type_display': webhook.get_event_type_display(),
+                'is_active': webhook.is_active,
+                'description': webhook.description,
+            }
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Invalid JSON data'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@require_http_methods(["DELETE"])
+def webhook_delete_api(request, webhook_id):
+    """API to delete webhook"""
+    try:
+        webhook = get_object_or_404(Webhook, id=webhook_id)
+        webhook_url = webhook.url
+        webhook.delete()
+
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Webhook {webhook_url} deleted successfully'
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@require_http_methods(["POST"])
+def webhook_test_api(request, webhook_id):
+    """API to test webhook by sending a test request"""
+    import requests
+    import time
+
+    try:
+        webhook = get_object_or_404(Webhook, id=webhook_id)
+
+        # Test payload
+        test_payload = {
+            'event': webhook.event_type,
+            'test': True,
+            'message': f'Test trigger for {webhook.get_event_type_display()}',
+            'timestamp': timezone.now().isoformat(),
+            'data': {
+                'webhook_id': webhook.id,
+                'webhook_url': webhook.url
+            }
+        }
+
+        # Send webhook request
+        start_time = time.time()
+        try:
+            response = requests.post(
+                webhook.url,
+                json=test_payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=10
+            )
+            response_time = time.time() - start_time
+
+            # Update webhook stats
+            webhook.last_triggered_at = timezone.now()
+            webhook.last_response_code = response.status_code
+            webhook.last_response_time = round(response_time, 3)
+            webhook.save()
+
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Webhook test completed',
+                'data': {
+                    'response_code': response.status_code,
+                    'response_time': round(response_time, 3),
+                    'response_body': response.text[:500] if response.text else None,  # Limit to 500 chars
+                }
+            })
+
+        except requests.exceptions.Timeout:
+            webhook.last_triggered_at = timezone.now()
+            webhook.last_response_code = None
+            webhook.last_response_time = None
+            webhook.save()
+
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Webhook request timed out (10s)',
+                'data': {
+                    'response_code': None,
+                    'response_time': None,
+                }
+            }, status=408)
+
+        except requests.exceptions.RequestException as e:
+            webhook.last_triggered_at = timezone.now()
+            webhook.last_response_code = None
+            webhook.last_response_time = None
+            webhook.save()
+
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Webhook request failed: {str(e)}',
+                'data': {
+                    'response_code': None,
+                    'response_time': None,
+                }
+            }, status=500)
 
     except Exception as e:
         return JsonResponse({

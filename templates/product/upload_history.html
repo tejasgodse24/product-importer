@@ -291,6 +291,7 @@
             <h1>Bulk Upload - Upload History</h1>
             <div class="header-actions">
                 <button class="btn btn-primary" onclick="openUploadModal()">+ Upload New CSV File</button>
+                <a href="/product/webhooks/" class="btn btn-secondary">🔗 Webhooks</a>
                 <a href="/product/" class="btn btn-secondary">← Back to Products</a>
             </div>
         </div>
@@ -367,13 +368,10 @@
         let currentPage = 1;
         let totalPages = 1;
         let selectedFile = null;
-        let refreshInterval;
+        let webSockets = {};  // Store WebSocket connections by upload_id
 
         $(document).ready(function() {
             loadUploadHistory();
-
-            // Auto-refresh every 5 seconds
-            refreshInterval = setInterval(loadUploadHistory, 5000);
 
             // Upload area click
             $('#uploadArea').on('click', function(e) {
@@ -449,26 +447,37 @@
                 const statusBadge = getStatusBadge(upload.status);
                 const progress = upload.progress_percentage || 0;
 
+                // Show progress bar only when status is not 'completed' or 'failed'
+                const showProgress = upload.status !== 'completed' && upload.status !== 'failed';
+                const progressHtml = showProgress ? `
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-${upload.id}" style="width: ${progress}%"></div>
+                    </div>
+                    <small id="progress-text-${upload.id}">${progress}%</small>
+                ` : `<small>${progress}%</small>`;
+
                 const row = `
-                    <tr>
+                    <tr id="upload-row-${upload.id}">
                         <td><strong>${upload.file_name}</strong></td>
-                        <td>${statusBadge}</td>
-                        <td>
-                            <div class="progress-bar">
-                                <div class="progress-fill" style="width: ${progress}%"></div>
-                            </div>
-                            <small>${progress}%</small>
+                        <td id="status-${upload.id}">${statusBadge}</td>
+                        <td id="progress-container-${upload.id}">
+                            ${progressHtml}
                         </td>
-                        <td>
-                            ${upload.processed_records}/${upload.total_records}<br>
-                            <small style="color: #28a745;">✓ ${upload.successful_records}</small>
-                            <small style="color: #dc3545;">✗ ${upload.failed_records}</small>
+                        <td id="records-${upload.id}">
+                            <span id="processed-${upload.id}">${upload.processed_records}</span>/<span id="total-${upload.id}">${upload.total_records}</span><br>
+                            <small style="color: #28a745;">✓ <span id="successful-${upload.id}">${upload.successful_records}</span></small>
+                            <small style="color: #dc3545;">✗ <span id="failed-${upload.id}">${upload.failed_records}</span></small>
                         </td>
                         <td>${upload.started_at || '-'}</td>
-                        <td>${upload.completed_at || '-'}</td>
+                        <td id="completed-${upload.id}">${upload.completed_at || '-'}</td>
                     </tr>
                 `;
                 tbody.append(row);
+
+                // Connect WebSocket for pending and processing uploads
+                if (upload.status === 'pending' || upload.status === 'processing') {
+                    connectWebSocket(upload.id);
+                }
             });
         }
 
@@ -588,6 +597,12 @@
                     if (response.status === 'success') {
                         showAlert('File uploaded successfully! Processing started in background.', 'success');
                         closeUploadModal();
+
+                        // Immediately connect WebSocket for the new upload
+                        if (response.upload_id) {
+                            connectWebSocket(response.upload_id);
+                        }
+
                         loadUploadHistory();
                     } else {
                         showAlert(response.message || 'Upload failed', 'error');
@@ -620,6 +635,92 @@
             }, 5000);
         }
 
+        function connectWebSocket(uploadId) {
+            // Don't create duplicate connections
+            if (webSockets[uploadId]) {
+                console.log(`WebSocket already connected for upload ${uploadId}`);
+                return;
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/upload-progress/${uploadId}/`;
+
+            console.log(`Attempting to connect WebSocket for upload ${uploadId} at ${wsUrl}`);
+
+            try {
+                const socket = new WebSocket(wsUrl);
+                webSockets[uploadId] = socket;
+
+                socket.onopen = function() {
+                    console.log(`✓ WebSocket connected for upload ${uploadId}`);
+                };
+
+                socket.onmessage = function(e) {
+                    const data = JSON.parse(e.data);
+                    console.log(`WebSocket message received for upload ${uploadId}:`, data);
+
+                    if (data.type === 'progress_update') {
+                        updateProgressUI(data);
+                    }
+                };
+
+                socket.onerror = function(error) {
+                    console.error(`WebSocket error for upload ${uploadId}:`, error);
+                };
+
+                socket.onclose = function() {
+                    console.log(`WebSocket closed for upload ${uploadId}`);
+                    delete webSockets[uploadId];
+                };
+            } catch (error) {
+                console.error(`Failed to create WebSocket for upload ${uploadId}:`, error);
+            }
+        }
+
+        function updateProgressUI(data) {
+            const uploadId = data.upload_id;
+            const progress = Math.round(data.progress_percentage || 0);
+
+            // Update progress bar
+            $(`#progress-${uploadId}`).css('width', `${progress}%`);
+            $(`#progress-text-${uploadId}`).text(`${progress}%`);
+
+            // Update status badge
+            $(`#status-${uploadId}`).html(getStatusBadge(data.status));
+
+            // Update records (only if data is available)
+            if (data.total_records !== undefined) {
+                $(`#total-${uploadId}`).text(data.total_records);
+            }
+            if (data.successful_records !== undefined) {
+                $(`#successful-${uploadId}`).text(data.successful_records);
+                // Use successful_records as processed if processed_records not available
+                $(`#processed-${uploadId}`).text(data.successful_records);
+            }
+            if (data.processed_records !== undefined) {
+                $(`#processed-${uploadId}`).text(data.processed_records);
+            }
+            if (data.failed_records !== undefined) {
+                $(`#failed-${uploadId}`).text(data.failed_records);
+            }
+
+            // If completed or failed, close WebSocket and update UI
+            if (data.status === 'completed' || data.status === 'failed') {
+                if (webSockets[uploadId]) {
+                    webSockets[uploadId].close();
+                    delete webSockets[uploadId];
+                }
+
+                // Hide progress bar, show final percentage
+                $(`#progress-container-${uploadId}`).html(`<small>${progress}%</small>`);
+
+                // Reload to get completed_at timestamp
+                setTimeout(() => {
+                    loadUploadHistory();
+                }, 1000);
+            }
+        }
+
         // Close modal on outside click
         $(document).on('click', '.modal', function(e) {
             if (e.target === this) {
@@ -627,9 +728,11 @@
             }
         });
 
-        // Clear interval on page unload
+        // Close WebSocket connections on page unload
         $(window).on('beforeunload', function() {
-            clearInterval(refreshInterval);
+            Object.values(webSockets).forEach(socket => {
+                socket.close();
+            });
         });
     </script>
 </body>

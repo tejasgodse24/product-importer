@@ -85,10 +85,8 @@ class Webhook(models.Model):
     Webhook configuration for product events
     """
     EVENT_CHOICES = [
-        ('product_created', 'Product Created'),
-        ('product_updated', 'Product Updated'),
-        ('product_deleted', 'Product Deleted'),
         ('bulk_upload_complete', 'Bulk Upload Complete'),
+        ('bulk_upload_failed', 'Bulk Upload Failed'),
         ('bulk_delete_complete', 'Bulk Delete Complete'),
     ]
 
