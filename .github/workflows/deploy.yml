@@ -1,0 +1,85 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches:
+      - main  # Trigger on push to main branch
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to EC2
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          # Setup SSH
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Add EC2 to known hosts
+          ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
+
+          # Deploy commands
+          ssh -i ~/.ssh/deploy_key $EC2_USER@$EC2_HOST << 'EOF'
+            set -e
+
+            echo "🚀 Starting deployment..."
+
+            # Navigate to project directory
+            cd ~/product-importer
+
+            # Pull latest changes
+            echo "📥 Pulling latest code from GitHub..."
+            git pull origin main
+
+            # Activate virtual environment
+            source venv/bin/activate
+
+            # Install/update dependencies
+            echo "📦 Installing dependencies..."
+            pip install -r requirements.txt --upgrade
+
+            # Collect static files
+            echo "🎨 Collecting static files..."
+            python manage.py collectstatic --noinput
+
+            # Run database migrations
+            echo "🗄️ Running database migrations..."
+            python manage.py migrate
+
+            # Restart services
+            echo "🔄 Restarting services..."
+            sudo systemctl restart gunicorn
+            sudo systemctl restart daphne
+            sudo systemctl restart celery
+            sudo systemctl restart nginx
+
+            # Check service status
+            echo "✅ Checking service status..."
+            sudo systemctl is-active --quiet gunicorn && echo "Gunicorn: Running ✓" || echo "Gunicorn: Failed ✗"
+            sudo systemctl is-active --quiet daphne && echo "Daphne: Running ✓" || echo "Daphne: Failed ✗"
+            sudo systemctl is-active --quiet celery && echo "Celery: Running ✓" || echo "Celery: Failed ✗"
+            sudo systemctl is-active --quiet nginx && echo "Nginx: Running ✓" || echo "Nginx: Failed ✗"
+
+            echo "🎉 Deployment completed successfully!"
+          EOF
+
+          # Cleanup
+          rm -f ~/.ssh/deploy_key
+
+      - name: Deployment Status
+        if: success()
+        run: echo "✅ Deployment to EC2 completed successfully!"
+
+      - name: Deployment Failed
+        if: failure()
+        run: echo "❌ Deployment failed! Check the logs above for details."
